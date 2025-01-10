@@ -1,0 +1,27 @@
+#!/bin/sh
+
+merge_to_branch=$1
+current_branch=$(git symbolic-ref --short -q HEAD)
+
+if [ ! -z "$1" ] # check if branch to merge into was provided; if not abort
+then
+  git checkout $merge_to_branch
+  git pull origin $merge_to_branch
+  git merge $current_branch --ff-only || { echo "Command failed. Try to rebase $current_branch onto $merge_to_branch and then try merge --ff-only again" >&2 ; git checkout $current_branch ; exit 1 ; }
+  echo "Merge successful! Now time to push $merge_to_branch"
+  git push origin $merge_to_branch
+  git checkout $current_branch
+  echo "Done!"
+
+  # Prompt user to see if they want to delete the current branch
+  read -p "Do you want to delete the branch '$current_branch'? (y/n): " confirm
+  if [ "$confirm" = "y" ]; then
+    git checkout $merge_to_branch
+    git branch -d $current_branch
+    echo "Branch '$current_branch' deleted."
+  else
+    echo "Branch '$current_branch' not deleted."
+  fi
+else
+  echo "Please provide a branch to merge into, like git mergeto <branch_name_here>"
+fi
