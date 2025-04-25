@@ -1,3 +1,7 @@
+## Intro
+
+These are custom git commands that I've made and found useful. Read how to make one [here](https://dev.to/shobhit/git-refresh-4hn)
+
 ## Commands
 
 ### git mergeto
