@@ -15,5 +15,11 @@ from the current working branch (feature, bugfix, etc), you can run `git mergeto
     - When finished, the script will prompt for current working branch deletion at the end of the process
     - if not deleted, checks back out to current working branch
 
+#### options
+
+--rebase
+
+you can optionally rebase your working branch onto the destination branch before the merge. This will then allow a fast-forward merge. You will be prompted (y/N) to force push the rebased branch to the remote.
+
 
 
