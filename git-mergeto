@@ -1,26 +1,112 @@
 #!/bin/sh
 
-merge_to_branch=$1
+# Show help if requested
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+  echo "Usage: git mergeto <target_branch> [--rebase]"
+  echo ""
+  echo "This command merges the current branch into <target_branch> and handles cleanup."
+  echo ""
+  echo "Options:"
+  echo "  --rebase    Rebase current branch onto target branch before merging"
+  echo "              This will force push to update the remote branch"
+  echo ""
+  echo "Configuration:"
+  echo "  - Reads from ~/.gitconfig for [merge] ff setting (only, false)"
+  echo "  - Protected branches (not prompted for deletion): dev, main, pre-release, staging"
+  echo "  - Override protected branches by editing the protected_branches variable in this script"
+  echo ""
+  exit 0
+fi
+
+# Parse arguments
+rebase_flag=false
+merge_to_branch=""
+
+for arg in "$@"; do
+  case $arg in
+    --rebase)
+      rebase_flag=true
+      ;;
+    *)
+      if [ -z "$merge_to_branch" ]; then
+        merge_to_branch="$arg"
+      fi
+      ;;
+  esac
+done
+
 current_branch=$(git symbolic-ref --short -q HEAD)
 
-if [ ! -z "$1" ] # check if branch to merge into was provided; if not abort
+# Define default protected branches
+protected_branches="dev main pre-release staging"
+
+# Check if [merge] ff configuration is set in ~/.gitconfig
+ff_config="--ff-only"
+merge_ff=$(git config --get merge.ff)
+if [ "$merge_ff" = "only" ]; then
+  ff_config="--ff-only"
+elif [ "$merge_ff" = "false" ]; then
+  ff_config="--no-ff"
+fi
+
+if [ ! -z "$merge_to_branch" ] # check if branch to merge into was provided; if not abort
 then
+  if [ "$rebase_flag" = true ]; then
+    echo "Rebasing $current_branch onto $merge_to_branch..."
+    
+    # First, fetch and update the target branch
+    git checkout $merge_to_branch
+    git pull origin $merge_to_branch
+    
+    # Go back to current branch and rebase
+    git checkout $current_branch
+    git rebase $merge_to_branch || { echo "Rebase failed. Please resolve conflicts and continue with 'git rebase --continue'" >&2 ; exit 1 ; }
+    
+    # Confirm force push
+    echo "Rebase successful! The current branch '$current_branch' has been rebased onto '$merge_to_branch'."
+    read -p "Do you want to force push '$current_branch' to update the remote? (y/n): " confirm_push
+    if [ "$confirm_push" = "y" ]; then
+      git push --force-with-lease origin $current_branch
+      echo "Force push successful!"
+    else
+      echo "Skipping force push. You can manually push later with: git push --force-with-lease origin $current_branch"
+    fi
+    
+    # Now continue with the regular merge process
+    echo "Proceeding with merge..."
+  fi
+  
   git checkout $merge_to_branch
-  git pull origin $merge_to_branch
-  git merge $current_branch --ff-only || { echo "Command failed. Try to rebase $current_branch onto $merge_to_branch and then try merge --ff-only again" >&2 ; git checkout $current_branch ; exit 1 ; }
+  if [ "$rebase_flag" = false ]; then
+    git pull origin $merge_to_branch
+  fi
+  git merge $current_branch $ff_config || { echo "Command failed. Try to rebase $current_branch onto $merge_to_branch and then try merge $ff_config again" >&2 ; git checkout $current_branch ; exit 1 ; }
   echo "Merge successful! Now time to push $merge_to_branch"
   git push origin $merge_to_branch
   git checkout $current_branch
   echo "Done!"
 
-  # Prompt user to see if they want to delete the current branch
-  read -p "Do you want to delete the branch '$current_branch'? (y/n): " confirm
-  if [ "$confirm" = "y" ]; then
-    git checkout $merge_to_branch
-    git branch -d $current_branch
-    echo "Branch '$current_branch' deleted."
+  # Check if current branch is protected
+  is_protected=0
+  for branch in $protected_branches; do
+    if [ "$branch" = "$current_branch" ]; then
+      is_protected=1
+      break
+    fi
+  done
+
+  # Only prompt for deletion if branch is not protected
+  if [ $is_protected -eq 0 ]; then
+    read -p "Do you want to delete the branch '$current_branch'? (y/n): " confirm
+    if [ "$confirm" = "y" ]; then
+      git checkout $merge_to_branch
+      git branch -d $current_branch
+      echo "Branch '$current_branch' deleted."
+    else
+      echo "Branch '$current_branch' not deleted."
+    fi
   else
-    echo "Branch '$current_branch' not deleted."
+    echo "Branch '$current_branch' is protected so you are not prompted for deletion."
   fi
 else
   echo "Please provide a branch to merge into, like git mergeto <branch_name_here>"
