@@ -1,0 +1,71 @@
+#!/bin/sh
+
+git_dir=$(git rev-parse --git-dir 2>/dev/null)
+if [ -z "$git_dir" ]; then
+  echo "Not inside a git repository." >&2
+  exit 1
+fi
+
+cleanup_file="$git_dir/deleted_branches_for_cleanup.txt"
+
+echo "Fetching and pruning remote tracking refs..."
+git fetch --prune origin
+echo ""
+
+if [ ! -f "$cleanup_file" ] || [ ! -s "$cleanup_file" ]; then
+  echo "No branches in cleanup list."
+  exit 0
+fi
+
+# Deduplicate and collect branches still on remote
+to_delete=""
+already_gone=""
+while IFS= read -r branch; do
+  [ -z "$branch" ] && continue
+  # Skip duplicates already queued
+  case "$to_delete$already_gone" in
+    *"|$branch|"*) continue ;;
+  esac
+  if git ls-remote --exit-code --heads origin "$branch" > /dev/null 2>&1; then
+    to_delete="$to_delete|$branch|"
+  else
+    already_gone="$already_gone|$branch|"
+  fi
+done < "$cleanup_file"
+
+if [ -n "$already_gone" ]; then
+  echo "Already gone from remote (will be removed from list):"
+  echo "$already_gone" | tr '|' '\n' | grep -v '^$' | sed 's/^/  /'
+  echo ""
+fi
+
+if [ -z "$to_delete" ]; then
+  echo "No remote branches to delete."
+  > "$cleanup_file"
+  exit 0
+fi
+
+echo "Remote branches to delete from origin:"
+echo "$to_delete" | tr '|' '\n' | grep -v '^$' | sed 's/^/  /'
+echo ""
+
+read -p "Delete all of the above from origin? (y/n): " confirm
+confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
+
+if [ "$confirm" = "y" ] || [ "$confirm" = "yes" ]; then
+  failed=""
+  echo "$to_delete" | tr '|' '\n' | grep -v '^$' | while IFS= read -r branch; do
+    if git push origin --delete "$branch"; then
+      echo "Deleted origin/$branch"
+    else
+      echo "Failed to delete origin/$branch" >&2
+      failed="$failed|$branch|"
+    fi
+  done
+  # Clear the file; any failures would need re-adding manually
+  > "$cleanup_file"
+  echo ""
+  echo "Cleanup complete."
+else
+  echo "Aborted. Cleanup list unchanged."
+fi

@@ -79,7 +79,7 @@ then
   
   git checkout $merge_to_branch
   if [ "$rebase_flag" = false ]; then
-    git pull origin $merge_to_branch
+    git pull origin $merge_to_branch || { echo "Failed to pull $merge_to_branch. You may need to rebase $current_branch onto $merge_to_branch first." >&2 ; git checkout $current_branch ; exit 1 ; }
   fi
   git merge $current_branch $ff_config || { echo "Command failed. Try to rebase $current_branch onto $merge_to_branch and then try merge $ff_config again" >&2 ; git checkout $current_branch ; exit 1 ; }
   echo "Merge successful! Now time to push $merge_to_branch"
@@ -104,6 +104,11 @@ then
       git checkout $merge_to_branch
       git branch -d $current_branch
       echo "Branch '$current_branch' deleted."
+      git_dir=$(git rev-parse --git-dir 2>/dev/null)
+      if [ -n "$git_dir" ]; then
+        echo "$current_branch" >> "$git_dir/deleted_branches_for_cleanup.txt"
+        echo "Added '$current_branch' to remote cleanup list. Run 'git cleanup' to delete these from the server when ready."
+      fi
     else
       echo "Branch '$current_branch' not deleted."
     fi
