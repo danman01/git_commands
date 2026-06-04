@@ -31,7 +31,7 @@ The config file can be defined per-repo and / or in your home dir. It reads per-
   1. Load ~/.pr-config (global defaults)
   2. Source <repo-root>/.pr-config on top (overrides only what's specified)
 
-  So a repo only needs to define what differs. If all your NCD repos share the same reviewers, put that in ~/.pr-config. A
+  So a repo only needs to define what differs. If all your team's repos share the same reviewers, put that in ~/.pr-config. A
   repo with a different main branch just overrides MAIN_BRANCH.
 
   ---
@@ -40,14 +40,14 @@ These commands have confirmation, especially important as git commands can actua
 
 Confirmation screen for git do-release:
 
-  Repo:      ncd/shopping-cart-app
+  Repo:      my-team/my-repo
   Merging:   pre-release → main
   Approval:  NOT APPROVED
 
   Warning: PR not approved. Recommended to get approval before continuing.
   Continue without approval? (y/N): y
 
-  Repo:      ncd/shopping-cart-app
+  Repo:      my-team/my-repo
   Merging:   pre-release → main
   Reviewers: Jim-John, dev-number-1-at-company
   Approval:  NOT APPROVED
