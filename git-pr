@@ -21,6 +21,19 @@ done
 commit_subject=$(git log -1 --format="%s")
 commit_body=$(git log -1 --format="%b")
 
+# --- Ensure branch is pushed to origin ---
+if ! git ls-remote --heads origin "$current_branch" 2>/dev/null | grep -q .; then
+  echo "Branch '$current_branch' has not been pushed to origin."
+  read -p "Push now? (y/N): " push_confirm
+  push_confirm=$(echo "$push_confirm" | tr '[:upper:]' '[:lower:]' | xargs)
+  if [ "$push_confirm" = "y" ] || [ "$push_confirm" = "yes" ]; then
+    git push -u origin "$current_branch" || { echo "Push failed." >&2; exit 1; }
+  else
+    echo "Aborted. Push your branch first with: git push -u origin $current_branch"
+    exit 0
+  fi
+fi
+
 # --- Ticket ---
 # 1. Try branch name suffix (e.g. my-feature-ENG2-1234)
 ticket=$(echo "$current_branch" | grep -oE '[A-Z]+-[0-9]+' | tail -1)

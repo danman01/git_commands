@@ -78,7 +78,7 @@ then
     echo "Proceeding with merge..."
   fi
   
-  git checkout $merge_to_branch
+  git checkout $merge_to_branch || { echo "Checkout failed. Commit or stash your changes before merging." >&2 ; exit 1 ; }
   if [ "$rebase_flag" = false ]; then
     git pull origin $merge_to_branch || { echo "Failed to pull $merge_to_branch. You may need to rebase $current_branch onto $merge_to_branch first." >&2 ; git checkout $current_branch ; exit 1 ; }
   fi
