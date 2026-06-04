@@ -36,11 +36,11 @@ fi
 
 # --- Ticket ---
 # 1. Try branch name suffix (e.g. my-feature-ENG2-1234)
-ticket=$(echo "$current_branch" | grep -oE '[A-Z]+-[0-9]+' | tail -1)
+ticket=$(echo "$current_branch" | grep -oE '[A-Z][A-Z0-9]*-[0-9]+' | tail -1)
 
 # 2. Try [ENG2-1234] in commit subject
 if [ -z "$ticket" ]; then
-  ticket=$(echo "$commit_subject" | grep -oE '\[[A-Z]+-[0-9]+\]' | grep -oE '[A-Z]+-[0-9]+' | head -1)
+  ticket=$(echo "$commit_subject" | grep -oE '\[[A-Z][A-Z0-9]*-[0-9]+\]' | grep -oE '[A-Z][A-Z0-9]*-[0-9]+' | head -1)
 fi
 
 # 3. Prompt
@@ -50,7 +50,7 @@ if [ -z "$ticket" ]; then
 fi
 
 # --- Category ---
-categories="feat fix style build docs perf refactor test"
+categories="feat fix style build docs perf refactor test cleanup"
 
 # Detect from conventional commit prefix (e.g. "feat: ..." or "feat(scope): ...")
 detected_category=$(echo "$commit_subject" | grep -oE '^[a-z]+(\([^)]+\))?:' | grep -oE '^[a-z]+' | head -1)
@@ -71,17 +71,22 @@ fi
 echo ""
 echo "  1) feat    2) fix     3) style   4) build"
 echo "  5) docs    6) perf    7) refactor 8) test"
+echo "  9) cleanup 10) other"
 if [ -n "$default_num" ]; then
-  read -p "Category [1-8] (enter for $default_num '$detected_category'): " cat_input
+  read -p "Category [1-10] (enter for $default_num '$detected_category'): " cat_input
 else
-  read -p "Category [1-8]: " cat_input
+  read -p "Category [1-10]: " cat_input
 fi
 cat_input=$(echo "$cat_input" | xargs)
 
-# Resolve selection: empty → detected, number → lookup, name → direct match
+# Resolve selection: empty → detected, "other"/10 → prompt, number/name → lookup
 selected_category=""
 if [ -z "$cat_input" ] && [ -n "$detected_category" ]; then
   selected_category="$detected_category"
+elif [ "$cat_input" = "10" ] || [ "$cat_input" = "other" ]; then
+  read -p "Category name: " selected_category
+  selected_category=$(echo "$selected_category" | xargs)
+  [ -z "$selected_category" ] && { echo "Error: Category cannot be empty." >&2; exit 1; }
 else
   i=1
   for cat in $categories; do
@@ -94,7 +99,7 @@ else
 fi
 
 if [ -z "$selected_category" ]; then
-  echo "Error: Invalid category. Enter a number 1-8 or a category name." >&2
+  echo "Error: Invalid category. Enter a number 1-10 or a category name." >&2
   exit 1
 fi
 
