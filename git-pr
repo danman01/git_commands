@@ -1,0 +1,154 @@
+#!/bin/sh
+# SUMMARY: Create a feature branch PR to dev
+. "$(dirname "$0")/_pr-config-helper"
+
+current_branch=$(git symbolic-ref --short -q HEAD)
+
+# Warn if on a base branch and suggest the right command
+for branch in "$PR_DEV_BRANCH" "$PR_MAIN_BRANCH" "$PR_PRE_RELEASE_BRANCH"; do
+  if [ "$current_branch" = "$branch" ]; then
+    echo "You're on '$current_branch'. This command is for feature branches."
+    echo ""
+    echo "For release-related PRs:"
+    echo "  git pr-pre-release   QA PR: $PR_DEV_BRANCH -> $PR_PRE_RELEASE_BRANCH"
+    echo "  git pr-release       Release PR: $PR_PRE_RELEASE_BRANCH -> $PR_MAIN_BRANCH"
+    echo ""
+    echo "See all commands: git list-custom-commands"
+    exit 1
+  fi
+done
+
+commit_subject=$(git log -1 --format="%s")
+commit_body=$(git log -1 --format="%b")
+
+# --- Ticket ---
+# 1. Try branch name suffix (e.g. my-feature-ENG2-1234)
+ticket=$(echo "$current_branch" | grep -oE '[A-Z]+-[0-9]+' | tail -1)
+
+# 2. Try [ENG2-1234] in commit subject
+if [ -z "$ticket" ]; then
+  ticket=$(echo "$commit_subject" | grep -oE '\[[A-Z]+-[0-9]+\]' | grep -oE '[A-Z]+-[0-9]+' | head -1)
+fi
+
+# 3. Prompt
+if [ -z "$ticket" ]; then
+  read -p "Task ID (e.g. ENG2-1234, or enter to skip): " ticket
+  ticket=$(echo "$ticket" | xargs)
+fi
+
+# --- Category ---
+categories="feat fix style build docs perf refactor test"
+
+# Detect from conventional commit prefix (e.g. "feat: ..." or "feat(scope): ...")
+detected_category=$(echo "$commit_subject" | grep -oE '^[a-z]+(\([^)]+\))?:' | grep -oE '^[a-z]+' | head -1)
+
+# Find index of detected category
+default_num=""
+if [ -n "$detected_category" ]; then
+  i=1
+  for cat in $categories; do
+    if [ "$cat" = "$detected_category" ]; then
+      default_num=$i
+      break
+    fi
+    i=$((i + 1))
+  done
+fi
+
+echo ""
+echo "  1) feat    2) fix     3) style   4) build"
+echo "  5) docs    6) perf    7) refactor 8) test"
+if [ -n "$default_num" ]; then
+  read -p "Category [1-8] (enter for $default_num '$detected_category'): " cat_input
+else
+  read -p "Category [1-8]: " cat_input
+fi
+cat_input=$(echo "$cat_input" | xargs)
+
+# Resolve selection: empty → detected, number → lookup, name → direct match
+selected_category=""
+if [ -z "$cat_input" ] && [ -n "$detected_category" ]; then
+  selected_category="$detected_category"
+else
+  i=1
+  for cat in $categories; do
+    if [ "$i" = "$cat_input" ] || [ "$cat" = "$cat_input" ]; then
+      selected_category="$cat"
+      break
+    fi
+    i=$((i + 1))
+  done
+fi
+
+if [ -z "$selected_category" ]; then
+  echo "Error: Invalid category. Enter a number 1-8 or a category name." >&2
+  exit 1
+fi
+
+# --- Title ---
+# Strip ticket prefix and category prefix from commit subject
+clean_subject="$commit_subject"
+clean_subject=$(echo "$clean_subject" | sed 's/^\[[A-Z][A-Z0-9]*-[0-9][0-9]*\] *//')
+clean_subject=$(echo "$clean_subject" | sed 's/^[a-z][a-z]*([^)]*): //')
+clean_subject=$(echo "$clean_subject" | sed 's/^[a-z][a-z]*: //')
+
+if [ -n "$ticket" ]; then
+  default_title="[$ticket] $selected_category: $clean_subject"
+else
+  default_title="$selected_category: $clean_subject"
+fi
+
+echo ""
+echo "Title:   $default_title"
+read -p "Press enter to accept, or type a new title: " custom_title
+custom_title=$(echo "$custom_title" | xargs)
+if [ -n "$custom_title" ]; then
+  pr_title="$custom_title"
+else
+  pr_title="$default_title"
+fi
+
+# --- Body ---
+pr_body=""
+
+echo ""
+if [ -n "$commit_body" ]; then
+  echo "Body:"
+  echo "$commit_body" | sed 's/^/  /'
+  echo ""
+  read -p "Use this body? (y/e/n - yes / edit / no body): " body_choice
+else
+  read -p "Add body? (e/n - edit in \$EDITOR / none): " body_choice
+fi
+body_choice=$(echo "$body_choice" | tr '[:upper:]' '[:lower:]' | xargs)
+
+case "$body_choice" in
+  y|yes)
+    pr_body="$commit_body"
+    ;;
+  e)
+    tmpfile=$(mktemp /tmp/git-pr-body.XXXXXX)
+    [ -n "$commit_body" ] && printf '%s\n' "$commit_body" > "$tmpfile"
+    ${EDITOR:-vi} "$tmpfile"
+    pr_body=$(cat "$tmpfile")
+    rm -f "$tmpfile"
+    ;;
+esac
+
+# --- Create PR ---
+reviewer_flags=""
+if [ -n "$PR_REVIEWERS" ]; then
+  reviewer_flags="--reviewer $PR_REVIEWERS"
+fi
+
+echo ""
+echo "Creating PR: $pr_title"
+echo "  $current_branch -> $PR_DEV_BRANCH"
+echo ""
+
+gh pr create \
+  --title "$pr_title" \
+  --body "$pr_body" \
+  --base "$PR_DEV_BRANCH" \
+  --head "$current_branch" \
+  $reviewer_flags

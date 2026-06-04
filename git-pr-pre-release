@@ -1,0 +1,21 @@
+#!/bin/sh
+# SUMMARY: Create a QA PR from dev to pre-release
+. "$(dirname "$0")/_pr-config-helper"
+
+if ! pre_release_exists; then
+  echo "Error: No '$PR_PRE_RELEASE_BRANCH' branch found on origin." >&2
+  echo "To open a release PR directly to '$PR_MAIN_BRANCH', use: git pr-release" >&2
+  exit 1
+fi
+
+reviewer_flags=""
+if [ -n "$PR_REVIEWERS" ]; then
+  reviewer_flags="--reviewer $PR_REVIEWERS"
+fi
+
+gh pr create \
+  --title "[QA] $PR_DEV_BRANCH -> $PR_PRE_RELEASE_BRANCH" \
+  --body "see commit history" \
+  --base "$PR_PRE_RELEASE_BRANCH" \
+  --head "$PR_DEV_BRANCH" \
+  $reviewer_flags

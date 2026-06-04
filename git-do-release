@@ -1,0 +1,81 @@
+#!/bin/sh
+# SUMMARY: Verify PR approval and merge the release branch to main
+. "$(dirname "$0")/_pr-config-helper"
+
+# Determine source branch
+if pre_release_exists; then
+  source_branch="$PR_PRE_RELEASE_BRANCH"
+else
+  source_branch="$PR_DEV_BRANCH"
+fi
+
+# Look up open PR
+pr_number=$(gh pr list --base "$PR_MAIN_BRANCH" --head "$source_branch" --json number --jq '.[0].number' 2>/dev/null)
+pr_review=$(gh pr list --base "$PR_MAIN_BRANCH" --head "$source_branch" --json reviewDecision --jq '.[0].reviewDecision' 2>/dev/null)
+
+if [ -z "$pr_number" ] || [ "$pr_number" = "null" ]; then
+  echo "Error: No open PR found from '$source_branch' to '$PR_MAIN_BRANCH'." >&2
+  echo "Create one with: git pr-release" >&2
+  exit 1
+fi
+
+# Warn if not approved
+if [ "$pr_review" != "APPROVED" ]; then
+  echo "Warning: PR #$pr_number is NOT approved."
+  read -p "Recommended to get approval before continuing. Continue without approval? (y/N): " confirm_unapproved
+  confirm_unapproved=$(echo "$confirm_unapproved" | tr '[:upper:]' '[:lower:]' | xargs)
+  if [ "$confirm_unapproved" != "y" ] && [ "$confirm_unapproved" != "yes" ]; then
+    echo "Aborted."
+    exit 0
+  fi
+fi
+
+# Gather display info
+repo=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)
+commits=$(git log --oneline "origin/$PR_MAIN_BRANCH..origin/$source_branch" 2>/dev/null)
+
+if [ "$pr_review" = "APPROVED" ]; then
+  approval_display="APPROVED"
+else
+  approval_display="NOT APPROVED"
+fi
+
+if [ -n "$PR_REVIEWERS" ]; then
+  reviewers_display=$(echo "$PR_REVIEWERS" | sed 's/,/, /g')
+else
+  reviewers_display="(none configured)"
+fi
+
+# Confirmation prompt
+echo ""
+echo "Repo:      $repo"
+echo "Merging:   $source_branch -> $PR_MAIN_BRANCH"
+echo "PR:        #$pr_number"
+echo "Reviewers: $reviewers_display"
+echo "Approval:  $approval_display"
+echo "Commits:"
+if [ -n "$commits" ]; then
+  echo "$commits" | while IFS= read -r line; do
+    echo "  $line"
+  done
+else
+  echo "  (none ahead of $PR_MAIN_BRANCH)"
+fi
+echo ""
+
+read -p "Proceed with release merge? (y/N): " confirm_merge
+confirm_merge=$(echo "$confirm_merge" | tr '[:upper:]' '[:lower:]' | xargs)
+if [ "$confirm_merge" != "y" ] && [ "$confirm_merge" != "yes" ]; then
+  echo "Aborted."
+  exit 0
+fi
+
+# Execute the merge
+original_branch=$(git symbolic-ref --short -q HEAD)
+git checkout "$source_branch" || { echo "Failed to checkout '$source_branch'." >&2; exit 1; }
+git mergeto "$PR_MAIN_BRANCH"
+
+# Return to original branch if it differs from source
+if [ -n "$original_branch" ] && [ "$original_branch" != "$source_branch" ]; then
+  git checkout "$original_branch"
+fi

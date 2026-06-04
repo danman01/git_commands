@@ -1,0 +1,21 @@
+#!/bin/sh
+# SUMMARY: Create a release PR from pre-release (or dev) to main
+. "$(dirname "$0")/_pr-config-helper"
+
+if pre_release_exists; then
+  source_branch="$PR_PRE_RELEASE_BRANCH"
+else
+  source_branch="$PR_DEV_BRANCH"
+fi
+
+reviewer_flags=""
+if [ -n "$PR_REVIEWERS" ]; then
+  reviewer_flags="--reviewer $PR_REVIEWERS"
+fi
+
+gh pr create \
+  --title "[RELEASE] $source_branch -> $PR_MAIN_BRANCH" \
+  --body "see commit history" \
+  --base "$PR_MAIN_BRANCH" \
+  --head "$source_branch" \
+  $reviewer_flags

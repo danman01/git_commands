@@ -1,0 +1,14 @@
+#!/bin/sh
+# SUMMARY: List all available custom git commands with descriptions
+
+dir="$(dirname "$0")"
+
+printf '%-28s %s\n' "Command" "Description"
+printf '%-28s %s\n' "-------" "-----------"
+
+for script in "$dir"/git-*; do
+  [ -f "$script" ] || continue
+  name="git $(basename "$script" | sed 's/^git-//')"
+  summary=$(grep '^# SUMMARY:' "$script" 2>/dev/null | head -1 | sed 's/^# SUMMARY: *//')
+  printf '%-28s %s\n' "$name" "$summary"
+done
