@@ -2,6 +2,11 @@
 # SUMMARY: Create a QA PR from dev to pre-release
 . "$(dirname "$0")/_pr-config-helper"
 
+if [ "$PR_DEV_BRANCH" = "$PR_MAIN_BRANCH" ]; then
+  echo "This repo works directly off '$PR_MAIN_BRANCH'. Use: git pr"
+  exit 1
+fi
+
 if ! pre_release_exists; then
   echo "Error: No '$PR_PRE_RELEASE_BRANCH' branch found on origin." >&2
   echo "To open a release PR directly to '$PR_MAIN_BRANCH', use: git pr-release" >&2
