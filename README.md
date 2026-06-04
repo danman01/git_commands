@@ -75,6 +75,10 @@ pre-release -> main
 
 actually does the merge using git mergeto (fast forward only)
 
+## git pr
+
+PR creation helper that sets up your feature branch to merge into dev ( or main if it doesn't exist...shame shame shame )
+
 ## git list-custom-commands 
 
 to see all commands
